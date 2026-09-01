@@ -1,0 +1,187 @@
+load("@bazel_skylib//lib:paths.bzl", "paths")
+load("@rules_pkg//pkg:install.bzl", "pkg_install")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+load("//build/kernel/kleaf:constants.bzl", "COMMON_KCFLAGS")
+load(
+    "//build/kernel/kleaf:kernel.bzl",
+    "kernel_build",
+    "kernel_images",
+    "kernel_modules_install",
+    "kernel_unstripped_modules_archive",
+    "merged_kernel_uapi_headers",
+)
+load("//common:bazel/modules.bzl", "get_gki_modules_list", "get_kunit_modules_list")
+
+
+
+package(
+    default_visibility = [
+        "//visibility:public",
+    ],
+)
+
+
+
+_GKI_MODULES_BASENAMES = get_gki_modules_list(
+    "arm64",
+    map_each = paths.basename,
+)
+
+_VIRT_COMMON_MODULES = [
+    # keep sorted
+    "failover.ko",
+    "goldfish_battery.ko",
+    "hci_vhci.ko",
+    "mac80211_hwsim.ko",
+    "net_failover.ko",
+    "rtc-test.ko",
+    "system_heap.ko",
+    "usbip-core.ko",
+    "vhci-hcd.ko",
+    "virt_wifi.ko",
+    "virtio-gpu.ko",
+    "virtio-rng.ko",
+    "virtio_balloon.ko",
+    "virtio_blk.ko",
+    "virtio_console.ko",
+    "virtio_dma_buf.ko",
+    "virtio_input.ko",
+    "virtio_net.ko",
+    "virtio_pci.ko",
+    "virtio_pci_legacy_dev.ko",
+    "virtio_pci_modern_dev.ko",
+    "virtio_snd.ko",
+    "vmw_vsock_virtio_transport.ko",
+    "mac80211.ko",
+    "cfg80211.ko",
+    "gzvm.ko",
+]
+
+_VIRT_AARCH64_MODULES = [
+    # keep sorted
+    "ambakmi.ko",
+    "armmmci.ko",
+    "clk-vexpress-osc.ko",
+    "drm_dma_helper.ko",
+    "nd_virtio.ko",
+    "pl111_drm.ko",
+    "psmouse.ko",
+    "vexpress-config.ko",
+    "vexpress-sysreg.ko",
+    "virtio_mmio.ko",
+    "virtio_pmem.ko",
+]
+
+_XEN_VIRT_AARCH64_MODULES = [
+    # keep sorted
+]
+
+# List of modules not copied to the distribution directory
+_IMPLICIT_MODULES = [
+    "vkms.ko",
+]
+
+
+
+filegroup(
+    name = "common_sources",
+    srcs = glob(
+        [
+            "*",
+            "configs/*",
+        ],
+        exclude = [
+            "Makefile",
+            "BUILD.bazel",
+        ],
+        allow_empty = True,
+    ),
+)
+
+filegroup(
+    name = "xen_virtual_device_aarch64_common_sources",
+    srcs = [
+        ":common_sources",
+        "//common:kernel_aarch64_sources",
+    ],
+)
+
+kernel_build(
+    name = "xen_virtual_device_aarch64",
+    srcs = [":xen_virtual_device_aarch64_common_sources"],
+    outs = [
+        "System.map",
+        "arch/arm64/boot/Image",
+        "modules.builtin",
+        "modules.builtin.modinfo",
+        "vmlinux",
+        "vmlinux.symvers",
+    ],
+    arch = "arm64",
+    base_kernel = None,
+    collect_unstripped_modules = True,
+    defconfig = "//common:arch/arm64/configs/gki_defconfig",
+    kcflags = COMMON_KCFLAGS,
+    make_goals = [
+        "Image",
+        "modules",
+    ],
+    makefile = "//common:Makefile",
+    post_defconfig_fragments = [
+        "virtual_device_core.fragment",
+        "virtual_device.fragment",
+        "aarch64.fragment",
+        "xenvm.aarch64.fragment",
+        "xenvm_debug.fragment",
+    ],
+    strip_modules = True,
+    module_outs = _GKI_MODULES_BASENAMES + _VIRT_COMMON_MODULES + _VIRT_AARCH64_MODULES + _XEN_VIRT_AARCH64_MODULES,
+    module_implicit_outs = _IMPLICIT_MODULES + get_kunit_modules_list(
+        "arm64",
+        map_each = paths.basename,
+    ),
+)
+
+kernel_modules_install(
+    name = "xen_virtual_device_aarch64_modules_install",
+    kernel_build = ":xen_virtual_device_aarch64",
+)
+
+kernel_unstripped_modules_archive(
+    name = "xen_virtual_device_aarch64_unstripped_modules_archive",
+    kernel_build = ":xen_virtual_device_aarch64",
+)
+
+merged_kernel_uapi_headers(
+    name = "xen_virtual_device_aarch64_merged_kernel_uapi_headers",
+    kernel_build = ":xen_virtual_device_aarch64",
+)
+
+kernel_images(
+    name = "xen_virtual_device_aarch64_images",
+    build_initramfs = True,
+    build_boot = False,
+    kernel_build = ":xen_virtual_device_aarch64",
+    kernel_modules_install = ":xen_virtual_device_aarch64_modules_install",
+    modules_blocklist = "modules.blocklist",
+    ramdisk_compression = "lz4",
+)
+
+pkg_files(
+    name = "xen_virtual_device_aarch64_dist_files",
+    srcs = [
+        ":xen_virtual_device_aarch64",
+        ":xen_virtual_device_aarch64_images",
+        ":xen_virtual_device_aarch64_merged_kernel_uapi_headers",
+        ":xen_virtual_device_aarch64_modules_install",
+        ":xen_virtual_device_aarch64_unstripped_modules_archive",
+    ],
+    strip_prefix = strip_prefix.files_only(),
+    visibility = ["//visibility:private"],
+)
+
+pkg_install(
+    name = "xen_virtual_device_aarch64_dist",
+    srcs = [":xen_virtual_device_aarch64_dist_files"],
+    destdir = "out/xen_virtual_device_aarch64/dist",
+)
