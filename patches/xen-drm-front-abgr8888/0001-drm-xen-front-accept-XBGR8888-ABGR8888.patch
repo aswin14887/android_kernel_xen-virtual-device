@@ -1,0 +1,20 @@
+diff --git a/drivers/gpu/drm/xen/xen_drm_front_conn.c b/drivers/gpu/drm/xen/xen_drm_front_conn.c
+index a1ba6d3d0..f0d0ed536 100644
+--- a/drivers/gpu/drm/xen/xen_drm_front_conn.c
++++ b/drivers/gpu/drm/xen/xen_drm_front_conn.c
+@@ -30,6 +30,15 @@ static const u32 plane_formats[] = {
+ 	DRM_FORMAT_RGB888,
+ 	DRM_FORMAT_XRGB8888,
+ 	DRM_FORMAT_ARGB8888,
++	/*
++	 * Android's SurfaceFlinger always allocates its client target as
++	 * HAL_PIXEL_FORMAT_RGBA_8888, i.e. DRM_FORMAT_ABGR8888, with no
++	 * property to change it. Without these the composer's AddFB2 fails
++	 * the "any plane supports this format" check and nothing is shown.
++	 * The format is passed to the backend in XENDISPL_OP_FB_ATTACH.
++	 */
++	DRM_FORMAT_XBGR8888,
++	DRM_FORMAT_ABGR8888,
+ 	DRM_FORMAT_XRGB4444,
+ 	DRM_FORMAT_ARGB4444,
+ 	DRM_FORMAT_XRGB1555,
